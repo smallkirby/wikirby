@@ -1,1 +1,186 @@
-<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom"><channel><title>WIKIRBY – Page Handling</title><link>https://wiki.smallkirby.xyz/linux/pages/</link><description>Recent content in Page Handling on WIKIRBY</description><generator>Hugo -- gohugo.io</generator><language>jp</language><atom:link href="https://wiki.smallkirby.xyz/linux/pages/index.xml" rel="self" type="application/rss+xml"/></channel></rss>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom"><channel><title>WIKIRBY – Page Handling</title><link>https://wiki.smallkirby.xyz/linux/pages/</link><description>Recent content in Page Handling on WIKIRBY</description><generator>Hugo -- gohugo.io</generator><language>jp</language><atom:link href="https://wiki.smallkirby.xyz/linux/pages/index.xml" rel="self" type="application/rss+xml"/><item><title>Linux: 4-level paging</title><link>https://wiki.smallkirby.xyz/linux/pages/4level-paging/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://wiki.smallkirby.xyz/linux/pages/4level-paging/</guid><description>
+&lt;p>Linuxの4-level paging、何かと細かいところ忘れがちですよね。&lt;/p>
+&lt;h2 id="pre-requisites">Pre-requisites&lt;/h2>
+&lt;p>ページテーブルは上位から順に&lt;code>PGD&lt;/code>,&lt;code>PUD&lt;/code>,&lt;code>PMD&lt;/code>,&lt;code>PTE&lt;/code>と呼ぶこととする。また、各テーブルに含まれているエントリのことも同じ名称で呼ぶこととするが、特にテーブル・エントリのどちらかを明示したい場合には&lt;code>PGD-table&lt;/code>/&lt;code>PGD-entry&lt;/code>のように呼ぶこととする。
+また、特に断りがない限りは4-level pagingに限定した話であり、5-level pagingは考えないものとする。&lt;/p>
+&lt;h2 id="基本事項あれこれ">基本事項あれこれ&lt;/h2>
+&lt;p>この図&lt;sup id="fnref:1">&lt;a href="#fn:1" class="footnote-ref" role="doc-noteref">1&lt;/a>&lt;/sup>の下の部分が4-level pagingの概要。図中では&lt;code>PML4&lt;/code>とか書かれているが、SDMとLinuxソースでは呼び方が異なるため&lt;a href="#pre-requisites">Prerequisites&lt;/a>で定義した呼び方で呼ぶ。&lt;/p>
+&lt;p>&lt;img src="./sdm-paging-abst.png" alt="4-level paging">&lt;/p>
+&lt;p>各テーブルのエントリが持つ値は、以下の感じ。図は5-levelも考慮されているが、4-levelの場合は&lt;code>PML5E&lt;/code>のことは無視。&lt;/p>
+&lt;p>&lt;img src="./sdm-table-entries.png" alt="table entries">&lt;/p>
+&lt;p>&lt;code>PMD&lt;/code>の7th-bitが立っている場合は2MB page(&lt;code>huge page&lt;/code>)として扱われ、PTEは存在せずに直接物理ページを指す。最近だと1GB pageもあるが、よく知らないしLinuxでサポートされてるかわからないので無視。&lt;/p>
+&lt;h3 id="ページテーブルのページサイズ">ページテーブルのページサイズ&lt;/h3>
+&lt;p>基本的にはどのテーブルも1ページ(4KiB)&lt;sup id="fnref:2">&lt;a href="#fn:2" class="footnote-ref" role="doc-noteref">2&lt;/a>&lt;/sup>。&lt;/p>
+&lt;div class="highlight">&lt;pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;">&lt;code class="language-c" data-lang="c">&lt;span style="display:flex;">&lt;span>&lt;span style="color:#75715e">// include/asm-generic/pgalloc.h
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#75715e">&lt;/span>&lt;span style="color:#66d9ef">static&lt;/span> &lt;span style="color:#66d9ef">inline&lt;/span> pgtable_t &lt;span style="color:#a6e22e">__pte_alloc_one&lt;/span>(&lt;span style="color:#66d9ef">struct&lt;/span> mm_struct &lt;span style="color:#f92672">*&lt;/span>mm, gfp_t gfp)
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>{
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#66d9ef">struct&lt;/span> page &lt;span style="color:#f92672">*&lt;/span>pte;
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> pte &lt;span style="color:#f92672">=&lt;/span> alloc_page(gfp); &lt;span style="color:#75715e">// &amp;lt;-- 1ページ分確保
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#75715e">&lt;/span> &lt;span style="color:#66d9ef">if&lt;/span> (&lt;span style="color:#f92672">!&lt;/span>pte)
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#66d9ef">return&lt;/span> NULL;
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#66d9ef">if&lt;/span> (&lt;span style="color:#f92672">!&lt;/span>pgtable_pte_page_ctor(pte)) {
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> __free_page(pte);
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#66d9ef">return&lt;/span> NULL;
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> }
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#66d9ef">return&lt;/span> pte;
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>}
+&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/div>&lt;p>但し、&lt;strong>KPTI&lt;/strong>が有効になっている場合にはPGDはuser/kernel用にそれぞれ1Pの、合計2ページ確保される:&lt;/p>
+&lt;div class="highlight">&lt;pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;">&lt;code class="language-c" data-lang="c">&lt;span style="display:flex;">&lt;span>&lt;span style="color:#75715e">#ifdef CONFIG_PAGE_TABLE_ISOLATION
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#75715e">#define PGD_ALLOCATION_ORDER 1
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#75715e">#else
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#75715e">#define PGD_ALLOCATION_ORDER 0
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#75715e">#endif
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#75715e">&lt;/span>&lt;span style="color:#66d9ef">static&lt;/span> &lt;span style="color:#66d9ef">inline&lt;/span> pgd_t &lt;span style="color:#f92672">*&lt;/span>&lt;span style="color:#a6e22e">_pgd_alloc&lt;/span>(&lt;span style="color:#66d9ef">void&lt;/span>)
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>{
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#66d9ef">return&lt;/span> (pgd_t &lt;span style="color:#f92672">*&lt;/span>)__get_free_pages(GFP_PGTABLE_USER,
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> PGD_ALLOCATION_ORDER);
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>}
+&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/div>&lt;h3 id="プロセス間での共有">プロセス間での共有&lt;/h3>
+&lt;p>PTEはプロセス間で共有される。対して、PGDは各プロセスが独立して持つ。
+具体的には、fork時に&lt;code>init&lt;/code>プロセス&lt;sup id="fnref:3">&lt;a href="#fn:3" class="footnote-ref" role="doc-noteref">3&lt;/a>&lt;/sup>のPGDをコピーして新しいプロセスのPGDを作成する:&lt;/p>
+&lt;div class="highlight">&lt;pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;">&lt;code class="language-c" data-lang="c">&lt;span style="display:flex;">&lt;span>&lt;span style="color:#66d9ef">static&lt;/span> &lt;span style="color:#66d9ef">struct&lt;/span> mm_struct &lt;span style="color:#f92672">*&lt;/span>&lt;span style="color:#a6e22e">mm_init&lt;/span>(&lt;span style="color:#66d9ef">struct&lt;/span> mm_struct &lt;span style="color:#f92672">*&lt;/span>mm, &lt;span style="color:#66d9ef">struct&lt;/span> task_struct &lt;span style="color:#f92672">*&lt;/span>p,
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#66d9ef">struct&lt;/span> user_namespace &lt;span style="color:#f92672">*&lt;/span>user_ns)
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>{
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> ...
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#66d9ef">if&lt;/span> (mm_alloc_pgd(mm))
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#66d9ef">goto&lt;/span> fail_nopgd;
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> ...
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>}
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>pgd_t &lt;span style="color:#f92672">*&lt;/span>&lt;span style="color:#a6e22e">pgd_alloc&lt;/span>(&lt;span style="color:#66d9ef">struct&lt;/span> mm_struct &lt;span style="color:#f92672">*&lt;/span>mm)
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>{
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> pgd_t &lt;span style="color:#f92672">*&lt;/span>pgd;
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> pgd &lt;span style="color:#f92672">=&lt;/span> _pgd_alloc();
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> ...
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> pgd_ctor(mm, pgd);
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> ...
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>}
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#66d9ef">static&lt;/span> &lt;span style="color:#66d9ef">void&lt;/span> &lt;span style="color:#a6e22e">pgd_ctor&lt;/span>(&lt;span style="color:#66d9ef">struct&lt;/span> mm_struct &lt;span style="color:#f92672">*&lt;/span>mm, pgd_t &lt;span style="color:#f92672">*&lt;/span>pgd)
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>{
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#66d9ef">if&lt;/span> (CONFIG_PGTABLE_LEVELS &lt;span style="color:#f92672">==&lt;/span> &lt;span style="color:#ae81ff">2&lt;/span> &lt;span style="color:#f92672">||&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> (CONFIG_PGTABLE_LEVELS &lt;span style="color:#f92672">==&lt;/span> &lt;span style="color:#ae81ff">3&lt;/span> &lt;span style="color:#f92672">&amp;amp;&amp;amp;&lt;/span> SHARED_KERNEL_PMD) &lt;span style="color:#f92672">||&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> CONFIG_PGTABLE_LEVELS &lt;span style="color:#f92672">&amp;gt;=&lt;/span> &lt;span style="color:#ae81ff">4&lt;/span>) {
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> clone_pgd_range(pgd &lt;span style="color:#f92672">+&lt;/span> KERNEL_PGD_BOUNDARY, &lt;span style="color:#75715e">// &amp;lt;-- ここ
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#75715e">&lt;/span> swapper_pg_dir &lt;span style="color:#f92672">+&lt;/span> KERNEL_PGD_BOUNDARY,
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> KERNEL_PGD_PTRS);
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> }
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#66d9ef">if&lt;/span> (&lt;span style="color:#f92672">!&lt;/span>SHARED_KERNEL_PMD) {
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> pgd_set_mm(pgd, mm);
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> pgd_list_add(pgd);
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> }
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>}
+&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/div>&lt;p>ではPMUとPMDはどうなっているかというと、知りません。なんかコード中に&lt;code>SHARED_KERNEL_PMD&lt;/code>とあるため、なんか設定できるのかもしれないけど、要検証。&lt;/p>
+&lt;h2 id="cr3とpgd">CR3とPGD&lt;/h2>
+&lt;h3 id="cr3-register">CR3 register&lt;/h3>
+&lt;p>各ページテーブルエントリは、後段のページテーブルの物理アドレスを持っている。よって、PGDのアドレスさえわかっていればそのプロセスに置いてVP変換ができる。このPGDのアドレスは、CR3レジスタが保持する:&lt;/p>
+&lt;p>&lt;img src="./sdm-control-regs.png" alt="">&lt;/p>
+&lt;p>VP変換はMMUが勝手にやってくれて、その際にCR3のアドレスを使ってやってくれる。&lt;/p>
+&lt;h3 id="cr3とtask_struct">CR3と&lt;code>task_struct&lt;/code>&lt;/h3>
+&lt;p>では各プロセスごとのPGDは誰が記憶しているかと言うと、&lt;code>task_struct-&amp;gt;mm-&amp;gt;pgd&lt;/code>が保持している:&lt;/p>
+&lt;div class="highlight">&lt;pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;">&lt;code class="language-c" data-lang="c">&lt;span style="display:flex;">&lt;span>&lt;span style="color:#66d9ef">struct&lt;/span> mm_struct {
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#66d9ef">struct&lt;/span> {
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> ...
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> pgd_t &lt;span style="color:#f92672">*&lt;/span> pgd; &lt;span style="color:#75715e">// &amp;lt;-- PGDへのアドレスを保持
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#75715e">&lt;/span> ...
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> }
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> ...
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>}
+&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/div>&lt;p>ここに入っているPGDの値はMMUが直接触るわけではなく、MMUはCR3の中に入っている値しか見ない。&lt;code>mm-&amp;gt;pgd&lt;/code>は、kernelのコードが後段のテーブルにアクセスするために利用される。&lt;/p>
+&lt;h3 id="context-switchとmm-pgd">Context Switchと&lt;code>mm-&amp;gt;pgd&lt;/code>&lt;/h3>
+&lt;p>&lt;code>mm-&amp;gt;pgd&lt;/code>の値は、CR3に入らないとMMUからは見えない。&lt;code>mm-&amp;gt;pgd&lt;/code>からCR3への値の代入は、&lt;code>context_switch()&lt;/code>から呼ばれる関数で行われている:&lt;/p>
+&lt;div class="highlight">&lt;pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;">&lt;code class="language-c" data-lang="c">&lt;span style="display:flex;">&lt;span>&lt;span style="color:#66d9ef">void&lt;/span> &lt;span style="color:#a6e22e">switch_mm_irqs_off&lt;/span>(&lt;span style="color:#66d9ef">struct&lt;/span> mm_struct &lt;span style="color:#f92672">*&lt;/span>prev, &lt;span style="color:#66d9ef">struct&lt;/span> mm_struct &lt;span style="color:#f92672">*&lt;/span>next,
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#66d9ef">struct&lt;/span> task_struct &lt;span style="color:#f92672">*&lt;/span>tsk)
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>{
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> ...
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#66d9ef">if&lt;/span> (need_flush) {
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> this_cpu_write(cpu_tlbstate.ctxs[new_asid].ctx_id, next&lt;span style="color:#f92672">-&amp;gt;&lt;/span>context.ctx_id);
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> this_cpu_write(cpu_tlbstate.ctxs[new_asid].tlb_gen, next_tlb_gen);
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> load_new_mm_cr3(next&lt;span style="color:#f92672">-&amp;gt;&lt;/span>pgd, new_asid, true);
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> trace_tlb_flush(TLB_FLUSH_ON_TASK_SWITCH, TLB_FLUSH_ALL);
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> } &lt;span style="color:#66d9ef">else&lt;/span> {
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> load_new_mm_cr3(next&lt;span style="color:#f92672">-&amp;gt;&lt;/span>pgd, new_asid, false);
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> trace_tlb_flush(TLB_FLUSH_ON_TASK_SWITCH, &lt;span style="color:#ae81ff">0&lt;/span>);
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> }
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> ...
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>}
+&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/div>&lt;p>&lt;code>xxx_tlb_flush()&lt;/code>系の関数によって、TLB上に残っている古い変換表をクリアしている。&lt;/p>
+&lt;h2 id="kernelとpgd">KernelとPGD&lt;/h2>
+&lt;p>読者の方もやったことがあると思うが、&lt;code>schedule_delayed_work()&lt;/code>等でkthread&lt;sup id="fnref:4">&lt;a href="#fn:4" class="footnote-ref" role="doc-noteref">4&lt;/a>&lt;/sup>を作って、そのハンドラの中から&lt;code>current-&amp;gt;mm-&amp;gt;pgd&lt;/code>のようにPGDテーブルを参照しようとすると、ヌルポになる。それもそのはずで、&lt;strong>kthreadは自身の&lt;code>mm&lt;/code>を持っていない&lt;/strong>。clone時に、他のプロセスから&lt;code>mm&lt;/code>を奪って&lt;code>task_struct-&amp;gt;active_mm&lt;/code>に代入する:&lt;/p>
+&lt;div class="highlight">&lt;pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;">&lt;code class="language-c" data-lang="c">&lt;span style="display:flex;">&lt;span>&lt;span style="color:#66d9ef">static&lt;/span> &lt;span style="color:#66d9ef">int&lt;/span> &lt;span style="color:#a6e22e">copy_mm&lt;/span>(&lt;span style="color:#66d9ef">unsigned&lt;/span> &lt;span style="color:#66d9ef">long&lt;/span> clone_flags, &lt;span style="color:#66d9ef">struct&lt;/span> task_struct &lt;span style="color:#f92672">*&lt;/span>tsk)
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>{
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#66d9ef">struct&lt;/span> mm_struct &lt;span style="color:#f92672">*&lt;/span>mm, &lt;span style="color:#f92672">*&lt;/span>oldmm;
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> tsk&lt;span style="color:#f92672">-&amp;gt;&lt;/span>min_flt &lt;span style="color:#f92672">=&lt;/span> tsk&lt;span style="color:#f92672">-&amp;gt;&lt;/span>maj_flt &lt;span style="color:#f92672">=&lt;/span> &lt;span style="color:#ae81ff">0&lt;/span>;
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> tsk&lt;span style="color:#f92672">-&amp;gt;&lt;/span>nvcsw &lt;span style="color:#f92672">=&lt;/span> tsk&lt;span style="color:#f92672">-&amp;gt;&lt;/span>nivcsw &lt;span style="color:#f92672">=&lt;/span> &lt;span style="color:#ae81ff">0&lt;/span>;
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> tsk&lt;span style="color:#f92672">-&amp;gt;&lt;/span>mm &lt;span style="color:#f92672">=&lt;/span> NULL;
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> tsk&lt;span style="color:#f92672">-&amp;gt;&lt;/span>active_mm &lt;span style="color:#f92672">=&lt;/span> NULL;
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#75715e">/*
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#75715e"> * Are we cloning a kernel thread?
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#75715e"> *
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#75715e"> * We need to steal a active VM for that..
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#75715e"> */&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> oldmm &lt;span style="color:#f92672">=&lt;/span> current&lt;span style="color:#f92672">-&amp;gt;&lt;/span>mm;
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#66d9ef">if&lt;/span> (&lt;span style="color:#f92672">!&lt;/span>oldmm)
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#66d9ef">return&lt;/span> &lt;span style="color:#ae81ff">0&lt;/span>;
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#75715e">/* initialize the new vmacache entries */&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> vmacache_flush(tsk);
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#66d9ef">if&lt;/span> (clone_flags &lt;span style="color:#f92672">&amp;amp;&lt;/span> CLONE_VM) {
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> mmget(oldmm);
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> mm &lt;span style="color:#f92672">=&lt;/span> oldmm;
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> } &lt;span style="color:#66d9ef">else&lt;/span> {
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> mm &lt;span style="color:#f92672">=&lt;/span> dup_mm(tsk, current&lt;span style="color:#f92672">-&amp;gt;&lt;/span>mm);
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#66d9ef">if&lt;/span> (&lt;span style="color:#f92672">!&lt;/span>mm)
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#66d9ef">return&lt;/span> &lt;span style="color:#f92672">-&lt;/span>ENOMEM;
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> }
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> tsk&lt;span style="color:#f92672">-&amp;gt;&lt;/span>mm &lt;span style="color:#f92672">=&lt;/span> mm;
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> tsk&lt;span style="color:#f92672">-&amp;gt;&lt;/span>active_mm &lt;span style="color:#f92672">=&lt;/span> mm;
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#66d9ef">return&lt;/span> &lt;span style="color:#ae81ff">0&lt;/span>;
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>}
+&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/div>&lt;h2 id="misc">Misc&lt;/h2>
+&lt;p>ページテーブル辿りたい時用のsnippet貼っておこ。&lt;code>pxd_offset()&lt;/code>で得られるアドレスは、テーブル自体のアドレスではなく、テーブル内のエントリのアドレスだから、注意だYO!&lt;/p>
+&lt;div class="highlight">&lt;pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;">&lt;code class="language-c" data-lang="c">&lt;span style="display:flex;">&lt;span>ulong pgd_addr &lt;span style="color:#f92672">=&lt;/span> (ulong)mm&lt;span style="color:#f92672">-&amp;gt;&lt;/span>pgd;
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>pgd_t &lt;span style="color:#f92672">*&lt;/span>pgd &lt;span style="color:#f92672">=&lt;/span> pgd_offset(mm, vaddr);
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>ulong pgd_val &lt;span style="color:#f92672">=&lt;/span> pgd_val(&lt;span style="color:#f92672">*&lt;/span>pgd);
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>BUG_ON(pgd_none(&lt;span style="color:#f92672">*&lt;/span>pgd));
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>pud_t &lt;span style="color:#f92672">*&lt;/span>pud &lt;span style="color:#f92672">=&lt;/span> pud_offset((p4d_t&lt;span style="color:#f92672">*&lt;/span>)pgd, vaddr);
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>ulong pud_val &lt;span style="color:#f92672">=&lt;/span> pud_val(&lt;span style="color:#f92672">*&lt;/span>pud);
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>BUG_ON(pud_none(&lt;span style="color:#f92672">*&lt;/span>pud));
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>pmd_t &lt;span style="color:#f92672">*&lt;/span>pmd &lt;span style="color:#f92672">=&lt;/span> pmd_offset(pud, vaddr);
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>ulong pmd_val &lt;span style="color:#f92672">=&lt;/span> pmd_val(&lt;span style="color:#f92672">*&lt;/span>pmd);
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>ulong pte_val &lt;span style="color:#f92672">=&lt;/span> &lt;span style="color:#ae81ff">0&lt;/span>;
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#66d9ef">if&lt;/span> (pmd_none(&lt;span style="color:#f92672">*&lt;/span>pmd)) {
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> pte_t &lt;span style="color:#f92672">*&lt;/span>pte &lt;span style="color:#f92672">=&lt;/span> pte_offset_kernel(pmd, vaddr);
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> pte_val &lt;span style="color:#f92672">=&lt;/span> pte_val(&lt;span style="color:#f92672">*&lt;/span>pte);
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>}
+&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/div>&lt;h2 id="references">References&lt;/h2>
+&lt;ul>
+&lt;li>Intel® 64 and IA-32 Architectures Software Developer’s Manual, April 2022&lt;/li>
+&lt;/ul>
+&lt;div class="footnotes" role="doc-endnotes">
+&lt;hr>
+&lt;ol>
+&lt;li id="fn:1">
+&lt;p>図は断らない限り&lt;a href="#references">References&lt;/a>のIntel SDMから引用&amp;#160;&lt;a href="#fnref:1" class="footnote-backref" role="doc-backlink">&amp;#x21a9;&amp;#xfe0e;&lt;/a>&lt;/p>
+&lt;/li>
+&lt;li id="fn:2">
+&lt;p>特に断らない限りLinuxのコードは&lt;code>Linux v5.15.23&lt;/code>&amp;#160;&lt;a href="#fnref:2" class="footnote-backref" role="doc-backlink">&amp;#x21a9;&amp;#xfe0e;&lt;/a>&lt;/p>
+&lt;/li>
+&lt;li id="fn:3">
+&lt;p>昔は&lt;code>swapper&lt;/code>って言ってたらしいですね。知らんけど。&amp;#160;&lt;a href="#fnref:3" class="footnote-backref" role="doc-backlink">&amp;#x21a9;&amp;#xfe0e;&lt;/a>&lt;/p>
+&lt;/li>
+&lt;li id="fn:4">
+&lt;p>kthreadていう呼び方が正しいのか知らないけど、まぁ、PPIDが2(&lt;code>kthreadd&lt;/code>)になる、アレです&amp;#160;&lt;a href="#fnref:4" class="footnote-backref" role="doc-backlink">&amp;#x21a9;&amp;#xfe0e;&lt;/a>&lt;/p>
+&lt;/li>
+&lt;/ol>
+&lt;/div></description></item></channel></rss>
