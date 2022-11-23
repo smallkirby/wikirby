@@ -3,10 +3,36 @@ languageCode = 'jp'
 title = 'WIKIRBY'
 
 disqusShortname = 'https-wiki-smallkirby-xyz'
-gcs_engine_id = '74c8139ea6716476d'
 sidebar_search_disable = false
 
+enableGitInfo = true
+contentDir = 'content'
+
+[params]
+copyright = 'smallkirby'
 github_repo = 'https://github.com/smallkirby/wikirby'
+github_branch = 'master'
+gcs_engine_id = '74c8139ea6716476d'
+offlineSearch = true
+
+[params.ui]
+sidebar_menu_compact = false
+breadcrumb_disable = false
+
+[[params.links.user]]
+	name ="Twitter"
+	url = "https://twitter.com/smallkirby/wikirby"
+	icon = "fab fa-twitter"
+
+[[params.links.user]]
+	name = "GitHub"
+	url = "https://github.com/smallkirby"
+	icon = "fab fa-github"
+
+[[params.links.developer]]
+	name = "GitHub"
+	url = "https://github.com/smallkirby"
+	icon = "fab fa-github"
 
 [module]
   proxy = "direct"
