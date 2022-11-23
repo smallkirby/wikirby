@@ -3,6 +3,8 @@ languageCode = 'jp'
 title = 'WIKIRBY'
 
 disqusShortname = 'https-wiki-smallkirby-xyz'
+gcs_engine_id = '74c8139ea6716476d'
+sidebar_search_disable = false
 
 [module]
   proxy = "direct"
