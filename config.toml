@@ -21,7 +21,7 @@ breadcrumb_disable = false
 
 [[params.links.user]]
 	name ="Twitter"
-	url = "https://twitter.com/smallkirby/wikirby"
+	url = "https://twitter.com/smallkirby"
 	icon = "fab fa-twitter"
 
 [[params.links.user]]
@@ -31,7 +31,7 @@ breadcrumb_disable = false
 
 [[params.links.developer]]
 	name = "GitHub"
-	url = "https://github.com/smallkirby"
+	url = "https://github.com/smallkirby/wikirby"
 	icon = "fab fa-github"
 
 [module]
