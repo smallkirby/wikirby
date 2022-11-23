@@ -1,6 +1,7 @@
 baseURL = 'https://wiki.smallkirby.xyz'
 languageCode = 'jp'
 title = 'WIKIRBY'
+description = 'Poetic Necropolis'
 
 disqusShortname = 'https-wiki-smallkirby-xyz'
 sidebar_search_disable = false

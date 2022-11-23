@@ -9,3 +9,7 @@ menu:
 ---
 
 Linux index
+
+{{< alert title="Warning" color="warning" >}}
+なんか間違いあったら教えてください。
+{{< /alert >}}
