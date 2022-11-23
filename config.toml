@@ -15,6 +15,7 @@ github_repo = 'https://github.com/smallkirby/wikirby'
 github_branch = 'master'
 #gcs_engine_id = '74c8139ea6716476d'
 offlineSearch = true
+prism_syntax_highlighting = false
 
 [params.ui]
 sidebar_menu_compact = true
