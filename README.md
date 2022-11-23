@@ -12,6 +12,6 @@ Huge Necropolis
 
 ```sh
 # Pre-requisites: hugo
-npm run ci
+npm ci
 npm run dev
 ```
