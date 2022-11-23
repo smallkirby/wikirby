@@ -12,11 +12,11 @@ contentDir = 'content'
 copyright = 'smallkirby'
 github_repo = 'https://github.com/smallkirby/wikirby'
 github_branch = 'master'
-gcs_engine_id = '74c8139ea6716476d'
+#gcs_engine_id = '74c8139ea6716476d'
 offlineSearch = true
 
 [params.ui]
-sidebar_menu_compact = false
+sidebar_menu_compact = true
 breadcrumb_disable = false
 
 [[params.links.user]]
