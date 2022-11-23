@@ -2,6 +2,8 @@ baseURL = 'https://wiki.smallkirby.xyz'
 languageCode = 'jp'
 title = 'WIKIRBY'
 
+disqusShortname = 'https-wiki-smallkirby-xyz'
+
 [module]
   proxy = "direct"
   [[module.imports]]

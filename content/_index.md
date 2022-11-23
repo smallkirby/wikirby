@@ -8,6 +8,4 @@ cascade:
       path: "/**"
 ---
 
-# hogehoge
-
-index
+[@smallkirby](https://twitter.com/smallkirby)が思ったことを書くらしいです。
