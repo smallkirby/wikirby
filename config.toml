@@ -11,11 +11,13 @@ contentDir = 'content'
 
 [params]
 copyright = 'smallkirby'
+description = "WIKIRBY: What I Write Is Read By You"
 github_repo = 'https://github.com/smallkirby/wikirby'
 github_branch = 'master'
 #gcs_engine_id = '74c8139ea6716476d'
 offlineSearch = true
 prism_syntax_highlighting = false
+navbar_log = true
 
 [params.ui]
 sidebar_menu_compact = true
