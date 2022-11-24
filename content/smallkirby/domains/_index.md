@@ -13,7 +13,7 @@ draft: false
 主に利用してるよ。
 
 - [smallkirby.xyz](https://smallkirby.xyz): HPだよ。tmuxみたいでかっこいいよね。
-- [wywiwya.smallkirby.xyz](https://smallkirby.xyz): 日付ベースのブログをホストしてるよ。エディタはめちゃくちゃいけてるけど、Chromeがクラッシュするくらいには重いよ。
+- [wywiwya.smallkirby.xyz](https://wywiwya.smallkirby.xyz): 日付ベースのブログをホストしてるよ。エディタはめちゃくちゃいけてるけど、Chromeがクラッシュするくらいには重いよ。
 - [task.smallkirby.xyz](https://task.smallkirby.xyz): Markdownで管理するタスクリストだよ。何気にヘビーユーズしてるよ。
 - [nirugiri.smallkirby.xyz](https://nirugiri.smallkirby.xyz): YouTubeのプレイリストにリダイレクトされるよ。たまに知らない曲入ってるよ。怖いね。
 - [wiki.smallkirby.xyz](https://wiki.smallkirby.xyz): このサイトだよ。まだ試験運用だよ。
