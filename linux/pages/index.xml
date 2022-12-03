@@ -12,15 +12,15 @@
 &lt;h3 id="ページテーブルのページサイズ">ページテーブルのページサイズ&lt;/h3>
 &lt;p>基本的にはどのテーブルも1ページ(4KiB)&lt;sup id="fnref:2">&lt;a href="#fn:2" class="footnote-ref" role="doc-noteref">2&lt;/a>&lt;/sup>。&lt;/p>
 &lt;div class="highlight">&lt;pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;">&lt;code class="language-c" data-lang="c">&lt;span style="display:flex;">&lt;span>&lt;span style="color:#75715e">// include/asm-generic/pgalloc.h
-&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#75715e">&lt;/span>&lt;span style="color:#66d9ef">static&lt;/span> &lt;span style="color:#66d9ef">inline&lt;/span> pgtable_t &lt;span style="color:#a6e22e">__pte_alloc_one&lt;/span>(&lt;span style="color:#66d9ef">struct&lt;/span> mm_struct &lt;span style="color:#f92672">*&lt;/span>mm, gfp_t gfp)
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#75715e">&lt;/span>&lt;span style="color:#66d9ef">static&lt;/span> &lt;span style="color:#66d9ef">inline&lt;/span> &lt;span style="color:#66d9ef">pgtable_t&lt;/span> &lt;span style="color:#a6e22e">__pte_alloc_one&lt;/span>(&lt;span style="color:#66d9ef">struct&lt;/span> mm_struct &lt;span style="color:#f92672">*&lt;/span>mm, &lt;span style="color:#66d9ef">gfp_t&lt;/span> gfp)
 &lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>{
 &lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#66d9ef">struct&lt;/span> page &lt;span style="color:#f92672">*&lt;/span>pte;
 &lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>
-&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> pte &lt;span style="color:#f92672">=&lt;/span> alloc_page(gfp); &lt;span style="color:#75715e">// &amp;lt;-- 1ページ分確保
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> pte &lt;span style="color:#f92672">=&lt;/span> &lt;span style="color:#a6e22e">alloc_page&lt;/span>(gfp); &lt;span style="color:#75715e">// &amp;lt;-- 1ページ分確保
 &lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#75715e">&lt;/span> &lt;span style="color:#66d9ef">if&lt;/span> (&lt;span style="color:#f92672">!&lt;/span>pte)
 &lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#66d9ef">return&lt;/span> NULL;
-&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#66d9ef">if&lt;/span> (&lt;span style="color:#f92672">!&lt;/span>pgtable_pte_page_ctor(pte)) {
-&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> __free_page(pte);
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#66d9ef">if&lt;/span> (&lt;span style="color:#f92672">!&lt;/span>&lt;span style="color:#a6e22e">pgtable_pte_page_ctor&lt;/span>(pte)) {
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#a6e22e">__free_page&lt;/span>(pte);
 &lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#66d9ef">return&lt;/span> NULL;
 &lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> }
 &lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>
@@ -32,9 +32,9 @@
 &lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#75715e">#else
 &lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#75715e">#define PGD_ALLOCATION_ORDER 0
 &lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#75715e">#endif
-&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#75715e">&lt;/span>&lt;span style="color:#66d9ef">static&lt;/span> &lt;span style="color:#66d9ef">inline&lt;/span> pgd_t &lt;span style="color:#f92672">*&lt;/span>&lt;span style="color:#a6e22e">_pgd_alloc&lt;/span>(&lt;span style="color:#66d9ef">void&lt;/span>)
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#75715e">&lt;/span>&lt;span style="color:#66d9ef">static&lt;/span> &lt;span style="color:#66d9ef">inline&lt;/span> &lt;span style="color:#66d9ef">pgd_t&lt;/span> &lt;span style="color:#f92672">*&lt;/span>&lt;span style="color:#a6e22e">_pgd_alloc&lt;/span>(&lt;span style="color:#66d9ef">void&lt;/span>)
 &lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>{
-&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#66d9ef">return&lt;/span> (pgd_t &lt;span style="color:#f92672">*&lt;/span>)__get_free_pages(GFP_PGTABLE_USER,
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#66d9ef">return&lt;/span> (&lt;span style="color:#66d9ef">pgd_t&lt;/span> &lt;span style="color:#f92672">*&lt;/span>)&lt;span style="color:#a6e22e">__get_free_pages&lt;/span>(GFP_PGTABLE_USER,
 &lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> PGD_ALLOCATION_ORDER);
 &lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>}
 &lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/div>&lt;h3 id="プロセス間での共有">プロセス間での共有&lt;/h3>
@@ -44,31 +44,31 @@
 &lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#66d9ef">struct&lt;/span> user_namespace &lt;span style="color:#f92672">*&lt;/span>user_ns)
 &lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>{
 &lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> ...
-&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#66d9ef">if&lt;/span> (mm_alloc_pgd(mm))
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#66d9ef">if&lt;/span> (&lt;span style="color:#a6e22e">mm_alloc_pgd&lt;/span>(mm))
 &lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#66d9ef">goto&lt;/span> fail_nopgd;
 &lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> ...
 &lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>}
-&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>pgd_t &lt;span style="color:#f92672">*&lt;/span>&lt;span style="color:#a6e22e">pgd_alloc&lt;/span>(&lt;span style="color:#66d9ef">struct&lt;/span> mm_struct &lt;span style="color:#f92672">*&lt;/span>mm)
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#66d9ef">pgd_t&lt;/span> &lt;span style="color:#f92672">*&lt;/span>&lt;span style="color:#a6e22e">pgd_alloc&lt;/span>(&lt;span style="color:#66d9ef">struct&lt;/span> mm_struct &lt;span style="color:#f92672">*&lt;/span>mm)
 &lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>{
-&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> pgd_t &lt;span style="color:#f92672">*&lt;/span>pgd;
-&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> pgd &lt;span style="color:#f92672">=&lt;/span> _pgd_alloc();
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#66d9ef">pgd_t&lt;/span> &lt;span style="color:#f92672">*&lt;/span>pgd;
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> pgd &lt;span style="color:#f92672">=&lt;/span> &lt;span style="color:#a6e22e">_pgd_alloc&lt;/span>();
 &lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> ...
-&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> pgd_ctor(mm, pgd);
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#a6e22e">pgd_ctor&lt;/span>(mm, pgd);
 &lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> ...
 &lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>}
-&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#66d9ef">static&lt;/span> &lt;span style="color:#66d9ef">void&lt;/span> &lt;span style="color:#a6e22e">pgd_ctor&lt;/span>(&lt;span style="color:#66d9ef">struct&lt;/span> mm_struct &lt;span style="color:#f92672">*&lt;/span>mm, pgd_t &lt;span style="color:#f92672">*&lt;/span>pgd)
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#66d9ef">static&lt;/span> &lt;span style="color:#66d9ef">void&lt;/span> &lt;span style="color:#a6e22e">pgd_ctor&lt;/span>(&lt;span style="color:#66d9ef">struct&lt;/span> mm_struct &lt;span style="color:#f92672">*&lt;/span>mm, &lt;span style="color:#66d9ef">pgd_t&lt;/span> &lt;span style="color:#f92672">*&lt;/span>pgd)
 &lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>{
 &lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#66d9ef">if&lt;/span> (CONFIG_PGTABLE_LEVELS &lt;span style="color:#f92672">==&lt;/span> &lt;span style="color:#ae81ff">2&lt;/span> &lt;span style="color:#f92672">||&lt;/span>
 &lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> (CONFIG_PGTABLE_LEVELS &lt;span style="color:#f92672">==&lt;/span> &lt;span style="color:#ae81ff">3&lt;/span> &lt;span style="color:#f92672">&amp;amp;&amp;amp;&lt;/span> SHARED_KERNEL_PMD) &lt;span style="color:#f92672">||&lt;/span>
 &lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> CONFIG_PGTABLE_LEVELS &lt;span style="color:#f92672">&amp;gt;=&lt;/span> &lt;span style="color:#ae81ff">4&lt;/span>) {
-&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> clone_pgd_range(pgd &lt;span style="color:#f92672">+&lt;/span> KERNEL_PGD_BOUNDARY, &lt;span style="color:#75715e">// &amp;lt;-- ここ
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#a6e22e">clone_pgd_range&lt;/span>(pgd &lt;span style="color:#f92672">+&lt;/span> KERNEL_PGD_BOUNDARY, &lt;span style="color:#75715e">// &amp;lt;-- ここ
 &lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#75715e">&lt;/span> swapper_pg_dir &lt;span style="color:#f92672">+&lt;/span> KERNEL_PGD_BOUNDARY,
 &lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> KERNEL_PGD_PTRS);
 &lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> }
 &lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>
 &lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#66d9ef">if&lt;/span> (&lt;span style="color:#f92672">!&lt;/span>SHARED_KERNEL_PMD) {
-&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> pgd_set_mm(pgd, mm);
-&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> pgd_list_add(pgd);
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#a6e22e">pgd_set_mm&lt;/span>(pgd, mm);
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#a6e22e">pgd_list_add&lt;/span>(pgd);
 &lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> }
 &lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>}
 &lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/div>&lt;p>ではPMUとPMDはどうなっているかというと、知りません。なんかコード中に&lt;code>SHARED_KERNEL_PMD&lt;/code>とあるため、なんか設定できるのかもしれないけど、要検証。&lt;/p>
@@ -82,7 +82,7 @@
 &lt;div class="highlight">&lt;pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;">&lt;code class="language-c" data-lang="c">&lt;span style="display:flex;">&lt;span>&lt;span style="color:#66d9ef">struct&lt;/span> mm_struct {
 &lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#66d9ef">struct&lt;/span> {
 &lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> ...
-&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> pgd_t &lt;span style="color:#f92672">*&lt;/span> pgd; &lt;span style="color:#75715e">// &amp;lt;-- PGDへのアドレスを保持
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#66d9ef">pgd_t&lt;/span> &lt;span style="color:#f92672">*&lt;/span> pgd; &lt;span style="color:#75715e">// &amp;lt;-- PGDへのアドレスを保持
 &lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#75715e">&lt;/span> ...
 &lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> }
 &lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> ...
@@ -95,13 +95,13 @@
 &lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>{
 &lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> ...
 &lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#66d9ef">if&lt;/span> (need_flush) {
-&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> this_cpu_write(cpu_tlbstate.ctxs[new_asid].ctx_id, next&lt;span style="color:#f92672">-&amp;gt;&lt;/span>context.ctx_id);
-&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> this_cpu_write(cpu_tlbstate.ctxs[new_asid].tlb_gen, next_tlb_gen);
-&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> load_new_mm_cr3(next&lt;span style="color:#f92672">-&amp;gt;&lt;/span>pgd, new_asid, true);
-&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> trace_tlb_flush(TLB_FLUSH_ON_TASK_SWITCH, TLB_FLUSH_ALL);
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#a6e22e">this_cpu_write&lt;/span>(cpu_tlbstate.ctxs[new_asid].ctx_id, next&lt;span style="color:#f92672">-&amp;gt;&lt;/span>context.ctx_id);
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#a6e22e">this_cpu_write&lt;/span>(cpu_tlbstate.ctxs[new_asid].tlb_gen, next_tlb_gen);
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#a6e22e">load_new_mm_cr3&lt;/span>(next&lt;span style="color:#f92672">-&amp;gt;&lt;/span>pgd, new_asid, true);
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#a6e22e">trace_tlb_flush&lt;/span>(TLB_FLUSH_ON_TASK_SWITCH, TLB_FLUSH_ALL);
 &lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> } &lt;span style="color:#66d9ef">else&lt;/span> {
-&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> load_new_mm_cr3(next&lt;span style="color:#f92672">-&amp;gt;&lt;/span>pgd, new_asid, false);
-&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> trace_tlb_flush(TLB_FLUSH_ON_TASK_SWITCH, &lt;span style="color:#ae81ff">0&lt;/span>);
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#a6e22e">load_new_mm_cr3&lt;/span>(next&lt;span style="color:#f92672">-&amp;gt;&lt;/span>pgd, new_asid, false);
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#a6e22e">trace_tlb_flush&lt;/span>(TLB_FLUSH_ON_TASK_SWITCH, &lt;span style="color:#ae81ff">0&lt;/span>);
 &lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> }
 &lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> ...
 &lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>}
@@ -128,13 +128,13 @@
 &lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#66d9ef">return&lt;/span> &lt;span style="color:#ae81ff">0&lt;/span>;
 &lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>
 &lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#75715e">/* initialize the new vmacache entries */&lt;/span>
-&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> vmacache_flush(tsk);
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#a6e22e">vmacache_flush&lt;/span>(tsk);
 &lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>
 &lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#66d9ef">if&lt;/span> (clone_flags &lt;span style="color:#f92672">&amp;amp;&lt;/span> CLONE_VM) {
-&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> mmget(oldmm);
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#a6e22e">mmget&lt;/span>(oldmm);
 &lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> mm &lt;span style="color:#f92672">=&lt;/span> oldmm;
 &lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> } &lt;span style="color:#66d9ef">else&lt;/span> {
-&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> mm &lt;span style="color:#f92672">=&lt;/span> dup_mm(tsk, current&lt;span style="color:#f92672">-&amp;gt;&lt;/span>mm);
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> mm &lt;span style="color:#f92672">=&lt;/span> &lt;span style="color:#a6e22e">dup_mm&lt;/span>(tsk, current&lt;span style="color:#f92672">-&amp;gt;&lt;/span>mm);
 &lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#66d9ef">if&lt;/span> (&lt;span style="color:#f92672">!&lt;/span>mm)
 &lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#66d9ef">return&lt;/span> &lt;span style="color:#f92672">-&lt;/span>ENOMEM;
 &lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> }
@@ -147,21 +147,21 @@
 &lt;p>ページテーブル辿りたい時用のsnippet貼っておこ。&lt;code>pxd_offset()&lt;/code>で得られるアドレスは、テーブル自体のアドレスではなく、テーブル内のエントリのアドレスだから、注意だYO!&lt;/p>
 &lt;div class="highlight">&lt;pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;">&lt;code class="language-c" data-lang="c">&lt;span style="display:flex;">&lt;span>ulong pgd_addr &lt;span style="color:#f92672">=&lt;/span> (ulong)mm&lt;span style="color:#f92672">-&amp;gt;&lt;/span>pgd;
 &lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>
-&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>pgd_t &lt;span style="color:#f92672">*&lt;/span>pgd &lt;span style="color:#f92672">=&lt;/span> pgd_offset(mm, vaddr);
-&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>ulong pgd_val &lt;span style="color:#f92672">=&lt;/span> pgd_val(&lt;span style="color:#f92672">*&lt;/span>pgd);
-&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>BUG_ON(pgd_none(&lt;span style="color:#f92672">*&lt;/span>pgd));
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#66d9ef">pgd_t&lt;/span> &lt;span style="color:#f92672">*&lt;/span>pgd &lt;span style="color:#f92672">=&lt;/span> &lt;span style="color:#a6e22e">pgd_offset&lt;/span>(mm, vaddr);
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>ulong pgd_val &lt;span style="color:#f92672">=&lt;/span> &lt;span style="color:#a6e22e">pgd_val&lt;/span>(&lt;span style="color:#f92672">*&lt;/span>pgd);
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#a6e22e">BUG_ON&lt;/span>(&lt;span style="color:#a6e22e">pgd_none&lt;/span>(&lt;span style="color:#f92672">*&lt;/span>pgd));
 &lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>
-&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>pud_t &lt;span style="color:#f92672">*&lt;/span>pud &lt;span style="color:#f92672">=&lt;/span> pud_offset((p4d_t&lt;span style="color:#f92672">*&lt;/span>)pgd, vaddr);
-&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>ulong pud_val &lt;span style="color:#f92672">=&lt;/span> pud_val(&lt;span style="color:#f92672">*&lt;/span>pud);
-&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>BUG_ON(pud_none(&lt;span style="color:#f92672">*&lt;/span>pud));
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#66d9ef">pud_t&lt;/span> &lt;span style="color:#f92672">*&lt;/span>pud &lt;span style="color:#f92672">=&lt;/span> &lt;span style="color:#a6e22e">pud_offset&lt;/span>((&lt;span style="color:#66d9ef">p4d_t&lt;/span>&lt;span style="color:#f92672">*&lt;/span>)pgd, vaddr);
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>ulong pud_val &lt;span style="color:#f92672">=&lt;/span> &lt;span style="color:#a6e22e">pud_val&lt;/span>(&lt;span style="color:#f92672">*&lt;/span>pud);
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#a6e22e">BUG_ON&lt;/span>(&lt;span style="color:#a6e22e">pud_none&lt;/span>(&lt;span style="color:#f92672">*&lt;/span>pud));
 &lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>
-&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>pmd_t &lt;span style="color:#f92672">*&lt;/span>pmd &lt;span style="color:#f92672">=&lt;/span> pmd_offset(pud, vaddr);
-&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>ulong pmd_val &lt;span style="color:#f92672">=&lt;/span> pmd_val(&lt;span style="color:#f92672">*&lt;/span>pmd);
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#66d9ef">pmd_t&lt;/span> &lt;span style="color:#f92672">*&lt;/span>pmd &lt;span style="color:#f92672">=&lt;/span> &lt;span style="color:#a6e22e">pmd_offset&lt;/span>(pud, vaddr);
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>ulong pmd_val &lt;span style="color:#f92672">=&lt;/span> &lt;span style="color:#a6e22e">pmd_val&lt;/span>(&lt;span style="color:#f92672">*&lt;/span>pmd);
 &lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>
 &lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>ulong pte_val &lt;span style="color:#f92672">=&lt;/span> &lt;span style="color:#ae81ff">0&lt;/span>;
-&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#66d9ef">if&lt;/span> (pmd_none(&lt;span style="color:#f92672">*&lt;/span>pmd)) {
-&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> pte_t &lt;span style="color:#f92672">*&lt;/span>pte &lt;span style="color:#f92672">=&lt;/span> pte_offset_kernel(pmd, vaddr);
-&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> pte_val &lt;span style="color:#f92672">=&lt;/span> pte_val(&lt;span style="color:#f92672">*&lt;/span>pte);
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#66d9ef">if&lt;/span> (&lt;span style="color:#a6e22e">pmd_none&lt;/span>(&lt;span style="color:#f92672">*&lt;/span>pmd)) {
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#66d9ef">pte_t&lt;/span> &lt;span style="color:#f92672">*&lt;/span>pte &lt;span style="color:#f92672">=&lt;/span> &lt;span style="color:#a6e22e">pte_offset_kernel&lt;/span>(pmd, vaddr);
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> pte_val &lt;span style="color:#f92672">=&lt;/span> &lt;span style="color:#a6e22e">pte_val&lt;/span>(&lt;span style="color:#f92672">*&lt;/span>pte);
 &lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>}
 &lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/div>&lt;h2 id="references">References&lt;/h2>
 &lt;ul>

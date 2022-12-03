@@ -1,0 +1,292 @@
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom"><channel><title>WIKIRBY – Syscall</title><link>https://wiki.smallkirby.xyz/cameyes/syscall/</link><description>Recent content in Syscall on WIKIRBY</description><generator>Hugo -- gohugo.io</generator><language>jp</language><atom:link href="https://wiki.smallkirby.xyz/cameyes/syscall/index.xml" rel="self" type="application/rss+xml"/><item><title>Cameyes: Table Overwrite</title><link>https://wiki.smallkirby.xyz/cameyes/syscall/table-hook/</link><pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate><guid>https://wiki.smallkirby.xyz/cameyes/syscall/table-hook/</guid><description>
+&lt;p>Linux Kernel v5.13.0&lt;/p>
+&lt;h2 id="syscall-hooking">Syscall Hooking&lt;/h2>
+&lt;p>Rootkitがなんらかのsyscall、若しくは全てのsyscallをフックしたいとします。このとき、フックの方法にはいくつかありますが、ここでは最も単純で直感的な「syscall tableを直接書き換える」方法を考えてみましょう。&lt;/p>
+&lt;h3 id="古き日のsyscall呼び出しの流れ">古き日のSyscall呼び出しの流れ&lt;/h3>
+&lt;p>まず、syscall呼び出しの流れを見てみましょう。&lt;/p>
+&lt;p>一昔前は&lt;code>int 0x80&lt;/code>命令によってsyscallを呼び出していました。ご存知の通り&lt;code>int&lt;/code>命令は割り込みを発生させる命令で、&lt;em>IDTR&lt;/em>によって指される割り込みテーブルに登録された割り込みハンドラに処理が移ります。&lt;code>int 0x80&lt;/code>なので、&lt;code>0x80&lt;/code>番がシステムコールのエントリポイントということですね。
+但し、なんか知らんけどいちいち割り込みを発生させるのはオーバーヘッドが大きいということで、最近では使われません。今でも呼び出すこと自体はできるのかは、知りません。あと、&lt;code>sysenter&lt;/code>とかいうやつに関しては、聞いたこともありません。&lt;/p>
+&lt;h3 id="現在のsyscall呼び出しの流れ">現在のSyscall呼び出しの流れ&lt;/h3>
+&lt;p>現在では、&lt;code>int&lt;/code>の代わりに&lt;a href="https://www.felixcloutier.com/x86/syscall.html">&lt;code>syscall&lt;/code>&lt;/a>を使います。こいつは、&lt;strong>IA32_LSTAR MSR&lt;/strong>に指されるエントリポイントに処理を移します。なんか知らんけど&lt;code>int&lt;/code>より早いらしいです。因みに、vDSOでuserlandにexportされているsyscallの場合はkernelに処理を移す必要すらありませんが、今回は無視します。&lt;/p>
+&lt;p>LSTAR MSRは、&lt;code>syscall_init()&lt;/code>で初期化され、&lt;code>entry_SYSCALL_64&lt;/code>を指します:&lt;/p>
+&lt;div class="highlight">&lt;pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;">&lt;code class="language-c" data-lang="c">&lt;span style="display:flex;">&lt;span>&lt;span style="color:#75715e">// arch/x86/kernel/cpu/common.c
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#75715e">&lt;/span>&lt;span style="color:#66d9ef">void&lt;/span> &lt;span style="color:#a6e22e">syscall_init&lt;/span>(&lt;span style="color:#66d9ef">void&lt;/span>)
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>{
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#a6e22e">wrmsr&lt;/span>(MSR_STAR, &lt;span style="color:#ae81ff">0&lt;/span>, (__USER32_CS &lt;span style="color:#f92672">&amp;lt;&amp;lt;&lt;/span> &lt;span style="color:#ae81ff">16&lt;/span>) &lt;span style="color:#f92672">|&lt;/span> __KERNEL_CS);
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#a6e22e">wrmsrl&lt;/span>(MSR_LSTAR, (&lt;span style="color:#66d9ef">unsigned&lt;/span> &lt;span style="color:#66d9ef">long&lt;/span>)entry_SYSCALL_64);
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#a6e22e">wrmsrl&lt;/span>(MSR_CSTAR, (&lt;span style="color:#66d9ef">unsigned&lt;/span> &lt;span style="color:#66d9ef">long&lt;/span>)ignore_sysret);
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#a6e22e">wrmsrl_safe&lt;/span>(MSR_IA32_SYSENTER_CS, (u64)GDT_ENTRY_INVALID_SEG);
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#a6e22e">wrmsrl_safe&lt;/span>(MSR_IA32_SYSENTER_ESP, &lt;span style="color:#ae81ff">0ULL&lt;/span>);
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#a6e22e">wrmsrl_safe&lt;/span>(MSR_IA32_SYSENTER_EIP, &lt;span style="color:#ae81ff">0ULL&lt;/span>);
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#75715e">/* Flags to clear on syscall */&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#a6e22e">wrmsrl&lt;/span>(MSR_SYSCALL_MASK,
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> X86_EFLAGS_TF&lt;span style="color:#f92672">|&lt;/span>X86_EFLAGS_DF&lt;span style="color:#f92672">|&lt;/span>X86_EFLAGS_IF&lt;span style="color:#f92672">|&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> X86_EFLAGS_IOPL&lt;span style="color:#f92672">|&lt;/span>X86_EFLAGS_AC&lt;span style="color:#f92672">|&lt;/span>X86_EFLAGS_NT);
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>}
+&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/div>&lt;p>&lt;code>entry_SYSCALL_64&lt;/code>は、&lt;code>arch/x86/entry/syscalls/syscall_64.S&lt;/code>で定義されています:&lt;/p>
+&lt;div class="highlight">&lt;pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;">&lt;code class="language-S" data-lang="S">&lt;span style="display:flex;">&lt;span>&lt;span style="color:#f92672">/*&lt;/span> arch&lt;span style="color:#f92672">/&lt;/span>x86&lt;span style="color:#f92672">/&lt;/span>entry&lt;span style="color:#f92672">/&lt;/span>syscalls&lt;span style="color:#f92672">/&lt;/span>syscall_64.S &lt;span style="color:#f92672">*/&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#a6e22e">SYM_CODE_START&lt;/span>(entry_SYSCALL_64)
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> UNWIND_HINT_EMPTY
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> swapgs
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> movq &lt;span style="color:#f92672">%rsp, PER_CPU_VAR(cpu_tss_rw + TSS_sp2)
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#f92672"> SWITCH_TO_KERNEL_CR3 scratch_reg=%&lt;/span>rsp
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> movq &lt;span style="color:#a6e22e">PER_CPU_VAR&lt;/span>(cpu_current_top_of_stack), &lt;span style="color:#f92672">%rsp
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#f92672">
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#f92672">SYM_INNER_LABEL(entry_SYSCALL_64_safe_stack, SYM_L_GLOBAL)
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#f92672">
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#f92672"> pushq $__USER_DS /* pt_regs-&amp;gt;ss */
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#f92672"> pushq PER_CPU_VAR(cpu_tss_rw + TSS_sp2) /* pt_regs-&amp;gt;sp */
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#f92672"> pushq %&lt;/span>r11 &lt;span style="color:#f92672">/*&lt;/span> pt_regs&lt;span style="color:#f92672">-&amp;gt;&lt;/span>flags &lt;span style="color:#f92672">*/&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> pushq &lt;span style="color:#f92672">$&lt;/span>__USER_CS &lt;span style="color:#f92672">/*&lt;/span> pt_regs&lt;span style="color:#f92672">-&amp;gt;&lt;/span>cs &lt;span style="color:#f92672">*/&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> pushq &lt;span style="color:#f92672">%rcx /* pt_regs-&amp;gt;ip */
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#f92672">SYM_INNER_LABEL(entry_SYSCALL_64_after_hwframe, SYM_L_GLOBAL)
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#f92672"> pushq %&lt;/span>rax &lt;span style="color:#f92672">/*&lt;/span> pt_regs&lt;span style="color:#f92672">-&amp;gt;&lt;/span>orig_ax &lt;span style="color:#f92672">*/&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> PUSH_AND_CLEAR_REGS rax&lt;span style="color:#f92672">=$-&lt;/span>ENOSYS
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#f92672">/*&lt;/span> IRQs are off. &lt;span style="color:#f92672">*/&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> movq &lt;span style="color:#f92672">%rax, %&lt;/span>rdi
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> movq &lt;span style="color:#f92672">%rsp, %&lt;/span>rsi
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> call do_syscall_64 &lt;span style="color:#f92672">/*&lt;/span> returns with IRQs disabled &lt;span style="color:#f92672">*/&lt;/span>
+&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/div>&lt;p>改めて、アセンブリとかいう言語はAT&amp;amp;TとIntelとかいう2つの方言があって腹が立つ言語ですね。最初に&lt;em>RSP&lt;/em>をkernelの退避領域に移した後、&lt;code>PER_CPU_VAR&lt;/code>からちゃんとしたスタックのアドレスを取り出しています。あとはスタック上に&lt;code>struct pt_regs&lt;/code>を構築した後、&lt;code>do_syscall_64()&lt;/code>を呼び出しています。こいつこそが真のエントリポイントです:&lt;/p>
+&lt;div class="highlight">&lt;pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;">&lt;code class="language-c" data-lang="c">&lt;span style="display:flex;">&lt;span>&lt;span style="color:#75715e">// arch/x86/entry/common.c
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#75715e">&lt;/span>__visible noinstr &lt;span style="color:#66d9ef">void&lt;/span> &lt;span style="color:#a6e22e">do_syscall_64&lt;/span>(&lt;span style="color:#66d9ef">unsigned&lt;/span> &lt;span style="color:#66d9ef">long&lt;/span> nr, &lt;span style="color:#66d9ef">struct&lt;/span> pt_regs &lt;span style="color:#f92672">*&lt;/span>regs)
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>{
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#a6e22e">add_random_kstack_offset&lt;/span>();
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> nr &lt;span style="color:#f92672">=&lt;/span> &lt;span style="color:#a6e22e">syscall_enter_from_user_mode&lt;/span>(regs, nr);
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#66d9ef">if&lt;/span> (&lt;span style="color:#a6e22e">likely&lt;/span>(nr &lt;span style="color:#f92672">&amp;lt;&lt;/span> NR_syscalls)) {
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> nr &lt;span style="color:#f92672">=&lt;/span> &lt;span style="color:#a6e22e">array_index_nospec&lt;/span>(nr, NR_syscalls);
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> regs&lt;span style="color:#f92672">-&amp;gt;&lt;/span>ax &lt;span style="color:#f92672">=&lt;/span> sys_call_table[nr](regs);
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> }
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#a6e22e">syscall_exit_to_user_mode&lt;/span>(regs);
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>}
+&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/div>&lt;p>&lt;code>entry_SYSCALL_64&lt;/code>内の&lt;code>movq %rax, %rdi&lt;/code>でsyscall番号(&lt;code>nr&lt;/code>)を&lt;em>RDI&lt;/em>に移しているので、第一引数は&lt;code>nr&lt;/code>になっています。&lt;code>regs&lt;/code>はスタック上に置いてあるレジスタ値で、あとで多分復元されます。&lt;code>syscall_enter_from_user_mode()&lt;/code>はIRQ周りの何かとかtrace周りの何かをしてましたが、そんな重要じゃないです。&lt;code>array_index_nospec()&lt;/code>は、&lt;code>nr&lt;/code>が&lt;code>NR_syscalls&lt;/code>を超えていないかチェックしています。最終的には、&lt;code>sys_call_table&lt;/code>の&lt;code>nr&lt;/code>番目を呼び出しているというところが大事です:&lt;/p>
+&lt;div class="highlight">&lt;pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;">&lt;code class="language-c" data-lang="c">&lt;span style="display:flex;">&lt;span>&lt;span style="color:#75715e">// arch/x86/include/asm/syscall.h
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#75715e">&lt;/span>&lt;span style="color:#66d9ef">typedef&lt;/span> &lt;span style="color:#a6e22e">long&lt;/span> (&lt;span style="color:#f92672">*&lt;/span>&lt;span style="color:#66d9ef">sys_call_ptr_t&lt;/span>)(&lt;span style="color:#66d9ef">const&lt;/span> &lt;span style="color:#66d9ef">struct&lt;/span> pt_regs &lt;span style="color:#f92672">*&lt;/span>);
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#75715e">// arch/x86/entry/syscall_64.c
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#75715e">&lt;/span>asmlinkage &lt;span style="color:#66d9ef">const&lt;/span> &lt;span style="color:#66d9ef">sys_call_ptr_t&lt;/span> sys_call_table[__NR_syscall_max&lt;span style="color:#f92672">+&lt;/span>&lt;span style="color:#ae81ff">1&lt;/span>] &lt;span style="color:#f92672">=&lt;/span> {
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#75715e">/*
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#75715e"> * Smells like a compiler bug -- it doesn&amp;#39;t work
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#75715e"> * when the &amp;amp; below is removed.
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#75715e"> */&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> [&lt;span style="color:#ae81ff">0&lt;/span> ... __NR_syscall_max] &lt;span style="color:#f92672">=&lt;/span> &lt;span style="color:#f92672">&amp;amp;&lt;/span>__x64_sys_ni_syscall,
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#75715e">#include&lt;/span> &lt;span style="color:#75715e">&amp;lt;asm/syscalls_64.h&amp;gt;&lt;/span>&lt;span style="color:#75715e">
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#75715e">&lt;/span>};
+&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/div>&lt;p>hackyですね。この部分、Linuxのコードの中で256本の指に入るくらいに好きな部分です。配列初期化の中に&lt;code>#include&lt;/code>を入れ込んでるところも良いですが、&lt;code>Smells like a compiler bug&lt;/code>というコメントもいい味を醸し出しています。最近のkernelだとこのコメント消されてるっぽいので、悲しいですね。それはさておき、&lt;code>asm/syscalls_64.h&lt;/code>はこんな感じでひたすらにシステムコールハンドラが登録されています:&lt;/p>
+&lt;div class="highlight">&lt;pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;">&lt;code class="language-h" data-lang="h">&lt;span style="display:flex;">&lt;span>arch&lt;span style="color:#f92672">/&lt;/span>x86&lt;span style="color:#f92672">/&lt;/span>include&lt;span style="color:#f92672">/&lt;/span>generated&lt;span style="color:#f92672">/&lt;/span>&lt;span style="color:#66d9ef">asm&lt;/span>&lt;span style="color:#f92672">/&lt;/span>syscalls_64.h
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#a6e22e">__SYSCALL_COMMON&lt;/span>(&lt;span style="color:#ae81ff">0&lt;/span>, sys_read)
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#a6e22e">__SYSCALL_COMMON&lt;/span>(&lt;span style="color:#ae81ff">1&lt;/span>, sys_write)
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#a6e22e">__SYSCALL_COMMON&lt;/span>(&lt;span style="color:#ae81ff">2&lt;/span>, sys_open)
+&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/div>&lt;p>&lt;code>__SYSCALL_COMMON&lt;/code>は、&lt;code>read&lt;/code>の場合に多分最終的にこんな感じに展開されます:&lt;/p>
+&lt;div class="highlight">&lt;pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;">&lt;code class="language-c" data-lang="c">&lt;span style="display:flex;">&lt;span>[&lt;span style="color:#ae81ff">0&lt;/span>] &lt;span style="color:#f92672">=&lt;/span> __x64_sys_read
+&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/div>&lt;p>まぁ配列の初期化をするだけですね。さてさて、それはさておき、syscallの定義で利用される&lt;code>SYSCALL_DEFINEx&lt;/code>マクロの内部で利用される&lt;code>__SYSCALL_DEFINEx&lt;/code>マクロは、以下のように3つの関数を定義します:&lt;/p>
+&lt;div class="highlight">&lt;pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;">&lt;code class="language-c" data-lang="c">&lt;span style="display:flex;">&lt;span>&lt;span style="color:#75715e">#define __SYSCALL_DEFINEx(x, name, ...) \
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#75715e"> static long __se_sys##name(__MAP(x,__SC_LONG,__VA_ARGS__)); \
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#75715e"> static inline long __do_sys##name(__MAP(x,__SC_DECL,__VA_ARGS__));\
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#75715e"> __X64_SYS_STUBx(x, name, __VA_ARGS__) \
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#75715e"> __IA32_SYS_STUBx(x, name, __VA_ARGS__) \
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#75715e"> static long __se_sys##name(__MAP(x,__SC_LONG,__VA_ARGS__)) \
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#75715e"> { \
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#75715e"> long ret = __do_sys##name(__MAP(x,__SC_CAST,__VA_ARGS__));\
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#75715e"> __MAP(x,__SC_TEST,__VA_ARGS__); \
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#75715e"> __PROTECT(x, ret,__MAP(x,__SC_ARGS,__VA_ARGS__)); \
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#75715e"> return ret; \
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#75715e"> } \
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#75715e"> static inline long __do_sys##name(__MAP(x,__SC_DECL,__VA_ARGS__))
+&lt;/span>&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/div>&lt;p>こいつらを展開するのはめんどいので、知りたい人は&lt;a href="https://www.kimullaa.com/posts/202006140247/">このへん&lt;/a>読んでください。取り敢えずのところ、&lt;code>__x64_sys_xxx()&lt;/code>が&lt;code>pt_regs&lt;/code>から値を取り出してハンドラ本体の引数として渡すということだけ理解してればOKです。ちょうどこの関数が、syscall tableに登録されていた各syscallのハンドラですね。&lt;/p>
+&lt;h3 id="フックできる場所">フックできる場所&lt;/h3>
+&lt;p>さて、ここまでの流れの中でフックに使えそうなポイントは2つくらいです。ほんとはもっとあるかもしれないけど。&lt;/p>
+&lt;p>まずは、&lt;code>sys_call_table&lt;/code>の中に入っている各syscallのエントリポイント(&lt;code>__x64_sys_xxx()&lt;/code>)を書き換えちゃうこと。これはなんか簡単そうですね。
+もう一つが、MSRを書き換えてそもそものエントリポイントを書き換えちゃうこと。こっちはアセンブラで&lt;code>entry_SYSCALL_64&lt;/code>のカスタム版を実装して自作の&lt;code>do_syscall_64()&lt;/code>を呼び出す必要があるので、ちょっとめんどくさそうですね。しかしながら、用意に監視され得るkernel領域を書き換えるのではなくレジスタ値のみを書き換えればいいので、研究の文脈でいうとこっちのほうが有用だったりします。しなかったりもします。&lt;/p>
+&lt;p>今回は、前者の&lt;code>sys_call_table&lt;/code>内のエントリを書き換える方法でいきます。&lt;/p>
+&lt;h2 id="sys_call_table-hooking">&lt;code>sys_call_table&lt;/code> hooking&lt;/h2>
+&lt;p>概略を言うと、&lt;code>sys_call_table&lt;/code>の中の関数ポインタを書き換えて、自作の関数に飛ばします。基本的にはそれだけです。&lt;/p>
+&lt;h3 id="sys_call_tableのリーク">&lt;code>sys_call_table&lt;/code>のリーク&lt;/h3>
+&lt;p>そもそもに、&lt;code>sys_call_table&lt;/code>はexportされていません。なので、リークする必要があります。一昔前は&lt;code>kallsyms_lookup_name()&lt;/code>という、任意のシンボルアドレスを教えてくれる便利関数がexportされていたらしいんですが、&lt;a href="https://lwn.net/Articles/813350/">こいつもv5.7からひきこもりになってしまいました&lt;/a>。なので、どうやってリークすれば良いのか迷ったんですが、まぁ有用なrootkitを作る必要はないので適当にkprobes使ってリークすることにしましょう。堂々とね！&lt;/p>
+&lt;div class="highlight">&lt;pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;">&lt;code class="language-c" data-lang="c">&lt;span style="display:flex;">&lt;span>ulong &lt;span style="color:#a6e22e">get_kallsyms_lookup_name_addr&lt;/span> (&lt;span style="color:#66d9ef">void&lt;/span>) {
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> ulong _kallsyms_lookup_name_addr;
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#66d9ef">struct&lt;/span> kprobe test_kp &lt;span style="color:#f92672">=&lt;/span>{
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> .symbol_name &lt;span style="color:#f92672">=&lt;/span> &lt;span style="color:#e6db74">&amp;#34;kallsyms_lookup_name&amp;#34;&lt;/span>,
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> };
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#66d9ef">if&lt;/span> (&lt;span style="color:#a6e22e">register_kprobe&lt;/span>(&lt;span style="color:#f92672">&amp;amp;&lt;/span>test_kp) &lt;span style="color:#f92672">&amp;lt;&lt;/span> &lt;span style="color:#ae81ff">0&lt;/span>) {
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#a6e22e">pr_err&lt;/span>(&lt;span style="color:#e6db74">&amp;#34;Failed to get addr of kallsyms_lookup_name.&amp;#34;&lt;/span>);
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#66d9ef">return&lt;/span> &lt;span style="color:#ae81ff">0&lt;/span>;
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> };
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> _kallsyms_lookup_name_addr &lt;span style="color:#f92672">=&lt;/span> (ulong)test_kp.addr;
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#a6e22e">unregister_kprobe&lt;/span>(&lt;span style="color:#f92672">&amp;amp;&lt;/span>test_kp);
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#66d9ef">return&lt;/span> _kallsyms_lookup_name_addr;
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>}
+&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/div>&lt;p>あとは&lt;code>kallsyms_lookup_name()&lt;/code>を使えば任意のシンボルをリークできます。&lt;/p>
+&lt;h3 id="wp-bitとsys_call_tableの書き換え">WP-bitと&lt;code>sys_call_table&lt;/code>の書き換え&lt;/h3>
+&lt;p>単純に&lt;code>sys_call_table[0] = 0xDEADBEEF&lt;/code>とかってやると、permission errorでpanicします。これは&lt;code>sys_call_table&lt;/code>の入ってるページにwrite protectionがかかっており、そこで発生したトラップハンドラの中で権限チェックされて落ちるからです。この書き込み保護は&lt;em>CR3&lt;/em>レジスタの&lt;em>WP&lt;/em>ビットをいじると無効化出来ます。kernelには&lt;code>native_write_cr0()&lt;/code>という関数がexportされています:&lt;/p>
+&lt;div class="highlight">&lt;pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;">&lt;code class="language-c" data-lang="c">&lt;span style="display:flex;">&lt;span>&lt;span style="color:#66d9ef">void&lt;/span> &lt;span style="color:#a6e22e">native_write_cr0&lt;/span>(&lt;span style="color:#66d9ef">unsigned&lt;/span> &lt;span style="color:#66d9ef">long&lt;/span> val)
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>{
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#66d9ef">unsigned&lt;/span> &lt;span style="color:#66d9ef">long&lt;/span> bits_missing &lt;span style="color:#f92672">=&lt;/span> &lt;span style="color:#ae81ff">0&lt;/span>;
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>set_register:
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#66d9ef">asm&lt;/span> &lt;span style="color:#66d9ef">volatile&lt;/span>(&lt;span style="color:#e6db74">&amp;#34;mov %0,%%cr0&amp;#34;&lt;/span>&lt;span style="color:#f92672">:&lt;/span> &lt;span style="color:#e6db74">&amp;#34;+r&amp;#34;&lt;/span> (val) &lt;span style="color:#f92672">:&lt;/span> &lt;span style="color:#f92672">:&lt;/span> &lt;span style="color:#e6db74">&amp;#34;memory&amp;#34;&lt;/span>);
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#66d9ef">if&lt;/span> (&lt;span style="color:#a6e22e">static_branch_likely&lt;/span>(&lt;span style="color:#f92672">&amp;amp;&lt;/span>cr_pinning)) {
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#66d9ef">if&lt;/span> (&lt;span style="color:#a6e22e">unlikely&lt;/span>((val &lt;span style="color:#f92672">&amp;amp;&lt;/span> X86_CR0_WP) &lt;span style="color:#f92672">!=&lt;/span> X86_CR0_WP)) {
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> bits_missing &lt;span style="color:#f92672">=&lt;/span> X86_CR0_WP;
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> val &lt;span style="color:#f92672">|=&lt;/span> bits_missing;
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#66d9ef">goto&lt;/span> set_register;
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> }
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#75715e">/* Warn after we&amp;#39;ve set the missing bits. */&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#a6e22e">WARN_ONCE&lt;/span>(bits_missing, &lt;span style="color:#e6db74">&amp;#34;CR0 WP bit went missing!?&lt;/span>&lt;span style="color:#ae81ff">\n&lt;/span>&lt;span style="color:#e6db74">&amp;#34;&lt;/span>);
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> }
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>}
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#a6e22e">EXPORT_SYMBOL&lt;/span>(native_write_cr0);
+&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/div>&lt;p>小癪なことに、WPビットが立っていない場合には警告を出した上で無理やりWPを建てていますね。なので、自分で関数を用意してあげましょう:&lt;/p>
+&lt;div class="highlight">&lt;pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;">&lt;code class="language-c" data-lang="c">&lt;span style="display:flex;">&lt;span>&lt;span style="color:#66d9ef">static&lt;/span> &lt;span style="color:#66d9ef">void&lt;/span> &lt;span style="color:#66d9ef">inline&lt;/span> &lt;span style="color:#a6e22e">nosec_write_cr0&lt;/span>(&lt;span style="color:#66d9ef">unsigned&lt;/span> &lt;span style="color:#66d9ef">long&lt;/span> val) {
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#66d9ef">asm&lt;/span> &lt;span style="color:#66d9ef">volatile&lt;/span>(&lt;span style="color:#e6db74">&amp;#34;mov %0,%%cr0&amp;#34;&lt;/span>&lt;span style="color:#f92672">:&lt;/span> &lt;span style="color:#e6db74">&amp;#34;+r&amp;#34;&lt;/span> (val) &lt;span style="color:#f92672">:&lt;/span> &lt;span style="color:#f92672">:&lt;/span> &lt;span style="color:#e6db74">&amp;#34;memory&amp;#34;&lt;/span>);
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>}
+&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/div>&lt;p>あとはこんな感じで書き換えてあげればOK:&lt;/p>
+&lt;div class="highlight">&lt;pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;">&lt;code class="language-c" data-lang="c">&lt;span style="display:flex;">&lt;span>&lt;span style="color:#66d9ef">static&lt;/span> &lt;span style="color:#66d9ef">void&lt;/span> &lt;span style="color:#a6e22e">disable_write_protection&lt;/span>(&lt;span style="color:#66d9ef">void&lt;/span>) {
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> ulong cr0 &lt;span style="color:#f92672">=&lt;/span> &lt;span style="color:#a6e22e">read_cr0&lt;/span>();
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#a6e22e">clear_bit&lt;/span>(&lt;span style="color:#ae81ff">16&lt;/span>, &lt;span style="color:#f92672">&amp;amp;&lt;/span>cr0);
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#a6e22e">nosec_write_cr0&lt;/span>(cr0);
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>}
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#66d9ef">static&lt;/span> &lt;span style="color:#66d9ef">void&lt;/span> &lt;span style="color:#a6e22e">enable_write_protection&lt;/span>(&lt;span style="color:#66d9ef">void&lt;/span>) {
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> ulong cr0 &lt;span style="color:#f92672">=&lt;/span> &lt;span style="color:#a6e22e">read_cr0&lt;/span>();
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#a6e22e">set_bit&lt;/span>(&lt;span style="color:#ae81ff">16&lt;/span>, &lt;span style="color:#f92672">&amp;amp;&lt;/span>cr0);
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#a6e22e">nosec_write_cr0&lt;/span>(cr0);
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>}
+&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/div>&lt;h3 id="フック関数">フック関数&lt;/h3>
+&lt;h4 id="フックの問題点">フックの問題点&lt;/h4>
+&lt;p>さて、&lt;code>sys_call_table&lt;/code>を書き換える準備が整いました。あとは、&lt;code>sys_call_table&lt;/code>の中身を書き換える関数を用意してあげればOKです。取り敢えずは全てのsyscallをプリフックして&lt;code>pr_info(&amp;quot;NIRUGIRI&amp;quot;)&lt;/code>と挨拶するようにしたいと考えましょう:&lt;/p>
+&lt;div class="highlight">&lt;pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;">&lt;code class="language-c" data-lang="c">&lt;span style="display:flex;">&lt;span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#66d9ef">int&lt;/span> &lt;span style="color:#a6e22e">hijack_syscall_table_entries&lt;/span> (&lt;span style="color:#66d9ef">void&lt;/span>) {
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#66d9ef">int&lt;/span> ix;
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#a6e22e">disable_write_protection&lt;/span>();
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#66d9ef">for&lt;/span> (ix &lt;span style="color:#f92672">=&lt;/span> &lt;span style="color:#ae81ff">0&lt;/span>; ix &lt;span style="color:#f92672">&amp;lt;&lt;/span> nr_syscall_max &lt;span style="color:#f92672">-&lt;/span> &lt;span style="color:#ae81ff">1&lt;/span>; ix&lt;span style="color:#f92672">++&lt;/span>) {
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> ((ulong &lt;span style="color:#f92672">*&lt;/span>)sys_call_table)[ix] &lt;span style="color:#f92672">=&lt;/span> (ulong)syscall_prehook;
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> }
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#a6e22e">enable_write_protection&lt;/span>();
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#66d9ef">return&lt;/span> &lt;span style="color:#ae81ff">0&lt;/span>;
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>}
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#66d9ef">static&lt;/span> &lt;span style="color:#66d9ef">inline&lt;/span> &lt;span style="color:#66d9ef">long&lt;/span> &lt;span style="color:#a6e22e">syscall_prehook&lt;/span>(&lt;span style="color:#66d9ef">struct&lt;/span> pt_regs &lt;span style="color:#f92672">*&lt;/span>regs) {
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#a6e22e">pr_info&lt;/span>(&lt;span style="color:#e6db74">&amp;#34;NIRUGIRI&amp;#34;&lt;/span>);
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#66d9ef">return&lt;/span> cloned_sys_call_table[nr](regs);
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>}
+&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/div>&lt;p>書き換えを行う関数で使っている&lt;code>sys_call_table&lt;/code>は、リークした&lt;code>kallsyms_lookup_name()&lt;/code>を使ってアドレスを調べておく必要があります。同様に、&lt;code>nr_syscall_max&lt;/code>もexportされていないため調べておく必要があります(単純にテーブルの中でNULLが出るまでのエントリ数をカウントすればOK)。&lt;/p>
+&lt;p>フック関数では&lt;code>pr_info()&lt;/code>したあとで、オリジナルのハンドラを呼び出しています。&lt;code>cloned_sys_call_table&lt;/code>は、オリジナルの&lt;code>sys_call_table&lt;/code>のクローンです。&lt;code>sys_call_table&lt;/code>内の関数ポインタは全て&lt;code>syscall_prehook()&lt;/code>へのポインタに書き換えるため、オリジナルのハンドラを記憶しておく必要があり、こいつがそれをしてくれます。&lt;/p>
+&lt;p>さて、ここで問題が発生しました。&lt;strong>&lt;code>nr&lt;/code>の値が分かりません&lt;/strong>。&lt;code>do_syscall_64&lt;/code>には第1引数(RDI)として&lt;code>nr&lt;/code>が渡されるのですが、この値は&lt;code>sys_call_table[nr](regs)&lt;/code>命令の最中に消されてしまいます:&lt;/p>
+&lt;pre tabindex="0">&lt;code>ffffffff81ba82a0 &amp;lt;do_syscall_64&amp;gt;:
+ffffffff81ba82a0: 55 push rbp
+ffffffff81ba82a1: 49 89 f8 mov r8,rdi
+ffffffff81ba82a4: 48 89 e5 mov rbp,rsp
+ffffffff81ba82a7: 41 54 push r12
+ffffffff81ba82a9: 49 89 f4 mov r12,rsi
+ffffffff81ba82ac: 0f 1f 44 00 00 nop DWORD PTR [rax+rax*1+0x0]
+ffffffff81ba82b1: 4c 89 c6 mov rsi,r8
+ffffffff81ba82b4: 4c 89 e7 mov rdi,r12
+ffffffff81ba82b7: e8 b4 32 00 00 call ffffffff81bab570 &amp;lt;syscall_enter_from_user_mode&amp;gt;
+ffffffff81ba82bc: 48 3d be 01 00 00 cmp rax,0x1be
+ffffffff81ba82c2: 77 21 ja ffffffff81ba82e5 &amp;lt;do_syscall_64+0x45&amp;gt;
+ffffffff81ba82c4: 48 3d bf 01 00 00 cmp rax,0x1bf
+ffffffff81ba82ca: 48 19 d2 sbb rdx,rdx
+ffffffff81ba82cd: 48 21 d0 and rax,rdx
+ffffffff81ba82d0: 4c 89 e7 mov rdi,r12
+ffffffff81ba82d3: 48 8b 04 c5 40 02 00 mov rax,QWORD PTR [rax*8-0x7dfffdc0]
+ffffffff81ba82da: 82
+ffffffff81ba82db: e8 80 b2 25 00 call ffffffff81e03560 &amp;lt;__x86_indirect_thunk_rax&amp;gt;
+&lt;/code>&lt;/pre>&lt;p>&lt;code>ffffffff81ba82bc (syscall_enter_from_user_mode)&lt;/code>の時点では、&lt;code>RAX&lt;/code>に&lt;code>nr&lt;/code>が入っています。しかしながら、&lt;code>ffffffff81ba82d3&lt;/code>において&lt;code>RAX&lt;/code>には&lt;code>sys_call_table[nr]&lt;/code>の値が入ってしまいます。これによって、&lt;code>nr&lt;/code>は完全に消えてしまいます。&lt;code>nr&lt;/code>が分からないと、フック関数の中でどのオリジナルハンドラを呼び出せば良いのかが分かりません。悲しいですね。&lt;/p>
+&lt;h4 id="nrを調べる">&lt;code>nr&lt;/code>を調べる&lt;/h4>
+&lt;p>しかしながら、唯一の希望として&lt;code>RAX&lt;/code>にはハンドラのアドレスが入っているということが分かっています。これだけだと、結局ハンドラのアドレス自体は全てプリフック関数のアドレスであるため&lt;code>nr&lt;/code>の判定は不可能ですが、ここは少しhackyにいきましょう。まず、以下のようなカスマクロを用意します:&lt;/p>
+&lt;div class="highlight">&lt;pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;">&lt;code class="language-c" data-lang="c">&lt;span style="display:flex;">&lt;span>&lt;span style="color:#75715e">#define REPEAT_1(x) x
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#75715e">#define REPEAT_2(x) REPEAT_1(x) x
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#75715e">#define REPEAT_4(x) REPEAT_2(x) REPEAT_2(x)
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#75715e">#define REPEAT_8(x) REPEAT_4(x) REPEAT_4(x)
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#75715e">#define REPEAT_16(x) REPEAT_8(x) REPEAT_8(x)
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#75715e">#define REPEAT_32(x) REPEAT_16(x) REPEAT_16(x)
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#75715e">#define REPEAT_64(x) REPEAT_32(x) REPEAT_32(x)
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#75715e">#define REPEAT_128(x) REPEAT_64(x) REPEAT_64(x)
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#75715e">#define REPEAT_256(x) REPEAT_128(x) REPEAT_128(x)
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#75715e">#define REPEAT_512(x) REPEAT_256(x) REPEAT_256(x)
+&lt;/span>&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/div>&lt;p>マクロを繰り返してくれるマクロです。因みに、自前で用意しなくても&lt;a href="https://www.boost.org/doc/libs/1_77_0/libs/preprocessor/doc/ref/repeat.html">Boostライブラリ&lt;/a>が&lt;code>BOOST_PP_REPEAT&lt;/code>というマクロを用意してくれてるらしいので、それを使ってもいいです。そのあと、以下のような関数を作ります:&lt;/p>
+&lt;div class="highlight">&lt;pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;">&lt;code class="language-c" data-lang="c">&lt;span style="display:flex;">&lt;span>&lt;span style="color:#75715e">#define JMP_INST \
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#75715e"> asm volatile(&amp;#34;push %0&amp;#34; : : &amp;#34;i&amp;#34; (jmp_thread)); \
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#75715e"> asm volatile(&amp;#34;ret&amp;#34;);
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#75715e">&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#75715e">#define JMP_THREAD \
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#75715e"> REPEAT_512(JMP_INST)
+&lt;/span>&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#75715e">&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#66d9ef">static&lt;/span> &lt;span style="color:#66d9ef">inline&lt;/span> &lt;span style="color:#66d9ef">void&lt;/span> &lt;span style="color:#a6e22e">jmp_thread&lt;/span>(&lt;span style="color:#66d9ef">void&lt;/span>) {
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#66d9ef">asm&lt;/span> &lt;span style="color:#66d9ef">volatile&lt;/span>(&lt;span style="color:#e6db74">&amp;#34;jmp *%0&amp;#34;&lt;/span> &lt;span style="color:#f92672">:&lt;/span> &lt;span style="color:#f92672">:&lt;/span> &lt;span style="color:#e6db74">&amp;#34;r&amp;#34;&lt;/span> (syscall_prehook) &lt;span style="color:#f92672">:&lt;/span> &lt;span style="color:#e6db74">&amp;#34;rax&amp;#34;&lt;/span>);
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> JMP_THREAD
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>}
+&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/div>&lt;p>&lt;code>jmp_thread()&lt;/code>関数の中では、先程用意したマクロによって512回分だけ&lt;code>JMP_INST&lt;/code>が展開されます。&lt;code>JMP_INST&lt;/code>は、&lt;code>jmp_thread()&lt;/code>に対してジャンプするようなアセンブラ命令を展開します。&lt;code>jmp_thread()&lt;/code>をコンパイルすると、こんな感じになります:&lt;/p>
+&lt;div class="highlight">&lt;pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;">&lt;code class="language-S" data-lang="S">&lt;span style="display:flex;">&lt;span>&lt;span style="color:#ae81ff">000000000000e405&lt;/span> &lt;span style="color:#f92672">&amp;lt;&lt;/span>jmp_thread&lt;span style="color:#f92672">&amp;gt;:&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> e405&lt;span style="color:#f92672">:&lt;/span> &lt;span style="color:#ae81ff">48&lt;/span> c7 c2 &lt;span style="color:#ae81ff">00&lt;/span> &lt;span style="color:#ae81ff">00&lt;/span> &lt;span style="color:#ae81ff">00&lt;/span> &lt;span style="color:#ae81ff">00&lt;/span> mov rdx,&lt;span style="color:#ae81ff">0x0&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> e40c&lt;span style="color:#f92672">:&lt;/span> ff e2 jmp rdx
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> e40e&lt;span style="color:#f92672">:&lt;/span> &lt;span style="color:#ae81ff">68&lt;/span> &lt;span style="color:#ae81ff">00&lt;/span> &lt;span style="color:#ae81ff">00&lt;/span> &lt;span style="color:#ae81ff">00&lt;/span> &lt;span style="color:#ae81ff">00&lt;/span> push &lt;span style="color:#ae81ff">0x0&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> e413&lt;span style="color:#f92672">:&lt;/span> c3 ret
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> e414&lt;span style="color:#f92672">:&lt;/span> &lt;span style="color:#ae81ff">68&lt;/span> &lt;span style="color:#ae81ff">00&lt;/span> &lt;span style="color:#ae81ff">00&lt;/span> &lt;span style="color:#ae81ff">00&lt;/span> &lt;span style="color:#ae81ff">00&lt;/span> push &lt;span style="color:#ae81ff">0x0&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> e419&lt;span style="color:#f92672">:&lt;/span> c3 ret
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> e41a&lt;span style="color:#f92672">:&lt;/span> &lt;span style="color:#ae81ff">68&lt;/span> &lt;span style="color:#ae81ff">00&lt;/span> &lt;span style="color:#ae81ff">00&lt;/span> &lt;span style="color:#ae81ff">00&lt;/span> &lt;span style="color:#ae81ff">00&lt;/span> push &lt;span style="color:#ae81ff">0x0&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> e41f&lt;span style="color:#f92672">:&lt;/span> c3 ret
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> e420&lt;span style="color:#f92672">:&lt;/span> &lt;span style="color:#ae81ff">68&lt;/span> &lt;span style="color:#ae81ff">00&lt;/span> &lt;span style="color:#ae81ff">00&lt;/span> &lt;span style="color:#ae81ff">00&lt;/span> &lt;span style="color:#ae81ff">00&lt;/span> push &lt;span style="color:#ae81ff">0x0&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> e425&lt;span style="color:#f92672">:&lt;/span> c3 ret
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> e426&lt;span style="color:#f92672">:&lt;/span> &lt;span style="color:#ae81ff">68&lt;/span> &lt;span style="color:#ae81ff">00&lt;/span> &lt;span style="color:#ae81ff">00&lt;/span> &lt;span style="color:#ae81ff">00&lt;/span> &lt;span style="color:#ae81ff">00&lt;/span> push &lt;span style="color:#ae81ff">0x0&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> e42b&lt;span style="color:#f92672">:&lt;/span> c3 ret
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> e42c&lt;span style="color:#f92672">:&lt;/span> &lt;span style="color:#ae81ff">68&lt;/span> &lt;span style="color:#ae81ff">00&lt;/span> &lt;span style="color:#ae81ff">00&lt;/span> &lt;span style="color:#ae81ff">00&lt;/span> &lt;span style="color:#ae81ff">00&lt;/span> push &lt;span style="color:#ae81ff">0x0&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> e431&lt;span style="color:#f92672">:&lt;/span> c3 ret
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> e432&lt;span style="color:#f92672">:&lt;/span> &lt;span style="color:#ae81ff">68&lt;/span> &lt;span style="color:#ae81ff">00&lt;/span> &lt;span style="color:#ae81ff">00&lt;/span> &lt;span style="color:#ae81ff">00&lt;/span> &lt;span style="color:#ae81ff">00&lt;/span> push &lt;span style="color:#ae81ff">0x0&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> e437&lt;span style="color:#f92672">:&lt;/span> c3 ret
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> e438&lt;span style="color:#f92672">:&lt;/span> &lt;span style="color:#ae81ff">68&lt;/span> &lt;span style="color:#ae81ff">00&lt;/span> &lt;span style="color:#ae81ff">00&lt;/span> &lt;span style="color:#ae81ff">00&lt;/span> &lt;span style="color:#ae81ff">00&lt;/span> push &lt;span style="color:#ae81ff">0x0&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> e43d&lt;span style="color:#f92672">:&lt;/span> c3 ret
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#66d9ef">...&lt;/span>
+&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/div>&lt;p>最初の&lt;code>mov rdx,0x0&lt;/code>は&lt;code>syscall_prehook()&lt;/code>のアドレスが、&lt;code>push 0x0&lt;/code>となっているところには、後ほど&lt;code>jmp_thread&lt;/code>のアドレスが入ります。勘の良い人ならお気づきの通り、syscallテーブル内のポインタを、&lt;code>jmp_thread&lt;/code>内の異なる&lt;code>push &amp;amp; ret&lt;/code>命令のアドレスに書き換えることで、全てのsyscallハンドラのアドレスが異なりつつも同じプリフック関数を呼び出すことが出来ます:&lt;/p>
+&lt;div class="highlight">&lt;pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;">&lt;code class="language-c" data-lang="c">&lt;span style="display:flex;">&lt;span>&lt;span style="color:#66d9ef">int&lt;/span> &lt;span style="color:#a6e22e">hijack_syscall_table_entries&lt;/span> (&lt;span style="color:#66d9ef">void&lt;/span>) {
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#66d9ef">int&lt;/span> ix;
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#a6e22e">disable_write_protection&lt;/span>();
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#66d9ef">for&lt;/span> (ix &lt;span style="color:#f92672">=&lt;/span> &lt;span style="color:#ae81ff">0&lt;/span>; ix &lt;span style="color:#f92672">&amp;lt;&lt;/span> nr_syscall_max &lt;span style="color:#f92672">-&lt;/span> &lt;span style="color:#ae81ff">1&lt;/span>; ix&lt;span style="color:#f92672">++&lt;/span>) {
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> ((ulong &lt;span style="color:#f92672">*&lt;/span>)sys_call_table)[ix] &lt;span style="color:#f92672">=&lt;/span> (ulong)jmp_thread &lt;span style="color:#f92672">+&lt;/span> &lt;span style="color:#ae81ff">0x9&lt;/span> &lt;span style="color:#f92672">+&lt;/span> &lt;span style="color:#ae81ff">6&lt;/span> &lt;span style="color:#f92672">*&lt;/span> ix;
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> }
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#a6e22e">enable_write_protection&lt;/span>();
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#66d9ef">return&lt;/span> &lt;span style="color:#ae81ff">0&lt;/span>;
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>}
+&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/div>&lt;p>&lt;code>0x9&lt;/code>は最初の&lt;code>syscall_prehook()&lt;/code>に飛ぶ命令長で、&lt;code>6&lt;/code>は&lt;code>push &amp;amp; ret&lt;/code>1つ分の命令長です。これで、全てのハンドラは最終的に&lt;code>syscall_prehook()&lt;/code>に飛びますが、そのアドレスは微妙に異なっているため&lt;code>syscall_prehook()&lt;/code>内で&lt;code>RAX&lt;/code>を調べることにより、もとの&lt;code>nr&lt;/code>を得ることが出来ます:&lt;/p>
+&lt;div class="highlight">&lt;pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;">&lt;code class="language-c" data-lang="c">&lt;span style="display:flex;">&lt;span>&lt;span style="color:#66d9ef">static&lt;/span> &lt;span style="color:#66d9ef">inline&lt;/span> &lt;span style="color:#66d9ef">long&lt;/span> &lt;span style="color:#a6e22e">syscall_prehook&lt;/span>(&lt;span style="color:#66d9ef">struct&lt;/span> pt_regs &lt;span style="color:#f92672">*&lt;/span>regs) {
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> ulong rax, nr;
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#66d9ef">asm&lt;/span> &lt;span style="color:#66d9ef">volatile&lt;/span>(&lt;span style="color:#e6db74">&amp;#34;mov %%rax, %0&amp;#34;&lt;/span> &lt;span style="color:#f92672">:&lt;/span> &lt;span style="color:#e6db74">&amp;#34;=r&amp;#34;&lt;/span> (rax));
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> nr &lt;span style="color:#f92672">=&lt;/span> (rax &lt;span style="color:#f92672">-&lt;/span> (ulong)jmp_thread &lt;span style="color:#f92672">-&lt;/span> &lt;span style="color:#ae81ff">9&lt;/span>) &lt;span style="color:#f92672">/&lt;/span> &lt;span style="color:#ae81ff">6&lt;/span>;
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#a6e22e">pr_info&lt;/span>(&lt;span style="color:#e6db74">&amp;#34;NIRUGIRI&amp;#34;&lt;/span>);
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> &lt;span style="color:#66d9ef">return&lt;/span> cloned_sys_call_table[nr](regs);
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>}
+&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/div>&lt;p>やったね！&lt;/p>
+&lt;p>因みに、&lt;code>asm volatile(&amp;quot;jmp *%0&amp;quot; : : &amp;quot;r&amp;quot; (syscall_prehook) : &amp;quot;rax&amp;quot;)&lt;/code>で適切にregister constraintを指定しないと、&lt;code>RAX&lt;/code>がworking regsとして利用されてしまい、せっかく保持されているハンドラのアドレスが消え去ってしまいます。今回は&lt;code>rax&lt;/code>を指定しているため、代わりに&lt;code>rdx&lt;/code>が使われています。この辺のインラインアセンブラについては、&lt;a href="https://wocota.hatenadiary.org/entry/20090628/1246188338">これ&lt;/a>が詳しい感じがするので読みたい人はどうぞ。&lt;/p>
+&lt;p>それから、&lt;code>JMP_INST&lt;/code>を&lt;code>&amp;quot;jmp *%0&amp;quot; : : &amp;quot;r&amp;quot; (jmp_thread)&lt;/code>ではなく&lt;code>push &amp;amp; ret&lt;/code>にしている理由ですが、前者にした場合アセンブラは以下のようになってしまいます:&lt;/p>
+&lt;div class="highlight">&lt;pre tabindex="0" style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4;">&lt;code class="language-S" data-lang="S">&lt;span style="display:flex;">&lt;span>&lt;span style="color:#ae81ff">000000000000e405&lt;/span> &lt;span style="color:#f92672">&amp;lt;&lt;/span>jmp_thread&lt;span style="color:#f92672">&amp;gt;:&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> e405&lt;span style="color:#f92672">:&lt;/span> &lt;span style="color:#ae81ff">48&lt;/span> c7 c2 &lt;span style="color:#ae81ff">00&lt;/span> &lt;span style="color:#ae81ff">00&lt;/span> &lt;span style="color:#ae81ff">00&lt;/span> &lt;span style="color:#ae81ff">00&lt;/span> mov rdx,&lt;span style="color:#ae81ff">0x0&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> e40c&lt;span style="color:#f92672">:&lt;/span> ff e2 jmp rdx
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> e40e&lt;span style="color:#f92672">:&lt;/span> &lt;span style="color:#ae81ff">48&lt;/span> c7 c0 &lt;span style="color:#ae81ff">00&lt;/span> &lt;span style="color:#ae81ff">00&lt;/span> &lt;span style="color:#ae81ff">00&lt;/span> &lt;span style="color:#ae81ff">00&lt;/span> mov rax,&lt;span style="color:#ae81ff">0x0&lt;/span>
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> e415&lt;span style="color:#f92672">:&lt;/span> ff e0 jmp rax
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> e417&lt;span style="color:#f92672">:&lt;/span> ff e0 jmp rax
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> e419&lt;span style="color:#f92672">:&lt;/span> ff e0 jmp rax
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> e41b&lt;span style="color:#f92672">:&lt;/span> ff e0 jmp rax
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> e41d&lt;span style="color:#f92672">:&lt;/span> ff e0 jmp rax
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> e41f&lt;span style="color:#f92672">:&lt;/span> ff e0 jmp rax
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> e421&lt;span style="color:#f92672">:&lt;/span> ff e0 jmp rax
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> e423&lt;span style="color:#f92672">:&lt;/span> ff e0 jmp rax
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span> e425&lt;span style="color:#f92672">:&lt;/span> ff e0 jmp rax
+&lt;/span>&lt;/span>&lt;span style="display:flex;">&lt;span>&lt;span style="color:#66d9ef">...&lt;/span>
+&lt;/span>&lt;/span>&lt;/code>&lt;/pre>&lt;/div>&lt;p>最初に一度だけ&lt;code>rax&lt;/code>に&lt;code>jmp_thread&lt;/code>の値を入れたっきり、二度と代入してくれませんね&amp;hellip;。これでは、syscallハンドラから&lt;code>jmp_thread()&lt;/code>の途中に飛んだ時、すでに&lt;code>RAX&lt;/code>に入っているアドレス、すなわち今現在のアドレスにジャンプすることになり、無限ジャンプを引き起こしてしまいます。というわけで、&lt;code>push &amp;amp; ret&lt;/code>にしたらいい感じに繰り返してくれる上に、レジスタ値を損なわなくて済むので、今回はそうなりました。&lt;/p></description></item></channel></rss>
