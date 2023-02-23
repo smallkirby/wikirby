@@ -59,3 +59,7 @@ draft: false
 ### GPG
 
 - `ADD55187E2CFF630`: Gitサインのためだけにつかってるよ。でもGPGキーの管理がばがば人間だから、してないよりも厄介だよ。メインPCでしか使ってないから、Verifiedバッジがついてないcommitを見たら、今こいつベッドの上でカタカタしてるなって思ってあげてね。
+
+### Misskey.io
+
+- [@smallkirby](https://misskey.io/@smallkirby): たまに使ってるよ
