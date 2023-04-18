@@ -23,6 +23,14 @@ draft: false
 
 HTTPでは使ってないよ。大体仮想環境が動いてるよ。
 
+## smallkirby.com
+
+ネットワークによっては`xyz`ドメインが禁止されてる場合も多くて、アクセスできないのがめんどくさいから買ったよ。
+基本的に`smallkirby.xyz`と同じだよ。
+まだあんまり整備してないよ。
+
+- [smallkirby.com](https://smallkirby.com): `smallkirby.xyz`のエイリアスだよ。
+
 ## Tips
 
 本当は`smallkir.by`を取りたいと思ってるよ。でもベラルーシの言葉で書かなくちゃいけないんだって、難しいね。
